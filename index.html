@@ -418,6 +418,24 @@
     </div>
   </div>
 
+  <!-- Compose -->
+  <div class="section compose">
+    <h3 class="section-title">
+      <span>✍️ 快速发推 <span style="font-size:11px;color:#f5a623;background:rgba(245,166,35,0.1);padding:2px 8px;border-radius:4px;margin-left:6px;">Demo 演示</span></span>
+      <span class="tag" id="composeStatus">就绪</span>
+    </h3>
+    <textarea id="composeText" placeholder="把今天的内容写在这里... 280 字以内"></textarea>
+    <div class="compose-bar">
+      <span class="char-count" id="charCount">0 / 280</span>
+      <div class="compose-actions">
+        <button class="btn-ghost" id="btnDraft">📝 存草稿</button>
+        <button class="btn-ghost" id="btnSendDrafts">📤 发送所有草稿</button>
+        <button class="btn-primary" id="btnPost">立即发布 →</button>
+      </div>
+    </div>
+    <div class="drafts" id="draftList"></div>
+  </div>
+
   <!-- Comparison Bar Chart -->
   <div class="section">
     <h3 class="section-title">
@@ -558,7 +576,7 @@
     <div class="tweets" id="tweetList"></div>
   </div>
 
-  <footer>📦 离线 Demo · 数据为静态快照 · 完整版需配置 GetXAPI Key 与 SQLite</footer>
+  <footer>📦 离线 Demo · 数据为静态快照 · 发推面板仅交互演示，未连接真实 API</footer>
 </div>
 
 <script>
@@ -914,6 +932,82 @@ document.querySelectorAll('#sortTabs .tab').forEach(t => {
     renderTweets();
   };
 });
+
+// ===== Compose (Demo 模式 - 不真实发送) =====
+const composeText = document.getElementById('composeText');
+const charCount = document.getElementById('charCount');
+const btnPost = document.getElementById('btnPost');
+const btnDraft = document.getElementById('btnDraft');
+const btnSendDrafts = document.getElementById('btnSendDrafts');
+const composeStatus = document.getElementById('composeStatus');
+const draftList = document.getElementById('draftList');
+
+// 内存中的草稿（仅 demo 用，刷新即丢失）
+let demoDrafts = [];
+let nextDraftId = 1;
+
+function updateCharCount() {
+  const n = composeText.value.length;
+  charCount.textContent = `${n} / 280`;
+  charCount.classList.remove('warn', 'over');
+  if (n > 280) charCount.classList.add('over');
+  else if (n > 250) charCount.classList.add('warn');
+  btnPost.disabled = n === 0 || n > 280;
+}
+composeText.addEventListener('input', updateCharCount);
+updateCharCount();
+
+function showToast(msg, type = 'success') {
+  const old = document.querySelector('.toast');
+  if (old) old.remove();
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.innerHTML = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
+}
+
+function renderDemoDrafts() {
+  if (!demoDrafts.length) { draftList.innerHTML = ''; return; }
+  draftList.innerHTML = demoDrafts.slice(0, 8).map(d =>
+    `<div class="draft-item">
+      <span class="draft-text">${escapeHtml(d.text)}</span>
+      <span class="draft-status ${d.status}">${
+        d.status === 'pending' ? '草稿' :
+        d.status === 'sent' ? '✅ 已发(模拟)' : d.status
+      }</span>
+    </div>`
+  ).join('');
+}
+
+btnPost.onclick = () => {
+  const text = composeText.value.trim();
+  if (!text) return;
+  composeStatus.textContent = '🎬 Demo 模式';
+  showToast('🎬 <b>Demo 模式</b><br>这里仅展示交互，未连接真实 X API。<br>正式版可一键发推到 @tenctcloud_Intl', 'success');
+  setTimeout(() => composeStatus.textContent = '就绪', 4000);
+};
+
+btnDraft.onclick = () => {
+  const text = composeText.value.trim();
+  if (!text) return;
+  demoDrafts.unshift({ id: nextDraftId++, text, status: 'pending' });
+  composeText.value = '';
+  updateCharCount();
+  showToast('📝 草稿已暂存（Demo 模式 · 刷新页面后丢失）', 'success');
+  renderDemoDrafts();
+};
+
+btnSendDrafts.onclick = () => {
+  if (!demoDrafts.length) {
+    showToast('暂无草稿可发送', 'error');
+    return;
+  }
+  if (!confirm('Demo 模式：将所有草稿标记为「已发(模拟)」，确认？')) return;
+  demoDrafts.forEach(d => d.status = 'sent');
+  showToast(`✅ Demo 模式：已模拟发送 ${demoDrafts.length} 条草稿`, 'success');
+  renderDemoDrafts();
+};
 
 loadData().catch(e => {
   document.body.innerHTML = `<div style="padding:40px;color:#ff6b6b;font-family:monospace;">
