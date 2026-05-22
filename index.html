@@ -587,8 +587,155 @@ async function loadData() {
   renderStatusesChart(); renderTable(); renderUserSelector();
   currentUser = DATA.self_account || (DATA.snapshots[0] && DATA.snapshots[0].username);
   renderTweets();
+  renderInsights();
 }
-;
+
+function renderHero() {
+  const self = DATA.snapshots.find(s => s.username === DATA.self_account);
+  if (!self) return;
+  document.getElementById('selfHandle').textContent = '@' + self.username;
+  document.getElementById('selfFollowers').textContent = fmt(self.followers);
+  document.getElementById('selfStatuses').textContent = fmt(self.statuses_count);
+  document.getElementById('selfMediaFollow').textContent = `${fmt(self.media_count)} / ${fmt(self.following)}`;
+
+  const top = DATA.snapshots.filter(s => s.username !== DATA.self_account)
+    .sort((a,b) => b.followers - a.followers)[0];
+  if (top && self.followers > 0) {
+    const gap = Math.round(top.followers / self.followers);
+    document.getElementById('gap').textContent = fmtShort(gap) + '×';
+    document.getElementById('gapTarget').textContent = '距 @' + top.username;
+  } else if (top) {
+    document.getElementById('gap').textContent = fmtShort(top.followers);
+    document.getElementById('gapTarget').textContent = '距 @' + top.username;
+  }
+}
+
+function renderFollowerChart() {
+  const sorted = [...DATA.snapshots].sort((a,b) => b.followers - a.followers);
+  const ctx = document.getElementById('followerChart');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(s => '@' + s.username),
+      datasets: [{
+        label: '粉丝数',
+        data: sorted.map(s => s.followers),
+        backgroundColor: sorted.map(s => s.username === DATA.self_account ? '#ff5a4e' : '#4d7cff'),
+        borderRadius: 6,
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: c => '粉丝: ' + fmt(c.raw) }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#8a93b0', callback: v => fmtShort(v) },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y: { ticks: { color: '#e8ecf5', autoSkip: false }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderEngagementChart() {
+  const eng = DATA.engagement || {};
+  const labels = DATA.snapshots.map(s => '@' + s.username);
+  const likes = DATA.snapshots.map(s => Math.round(eng[s.username]?.avg_like || 0));
+  const views = DATA.snapshots.map(s => Math.round(eng[s.username]?.avg_view || 0));
+  new Chart(document.getElementById('engagementChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '平均点赞', data: likes, backgroundColor: '#4d7cff', borderRadius: 4 },
+        { label: '平均浏览', data: views, backgroundColor: '#00d4ff', borderRadius: 4, yAxisID: 'y1' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#e8ecf5' } } },
+      scales: {
+        x: { ticks: { color: '#8a93b0', maxRotation: 60, minRotation: 30 }, grid: { display: false } },
+        y: { ticks: { color: '#8a93b0', callback: v => fmtShort(v) }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: '点赞', color: '#8a93b0' } },
+        y1: { position: 'right', ticks: { color: '#8a93b0', callback: v => fmtShort(v) }, grid: { display: false }, title: { display: true, text: '浏览', color: '#8a93b0' } }
+      }
+    }
+  });
+}
+
+function renderStatusesChart() {
+  const sorted = [...DATA.snapshots].sort((a,b) => b.statuses_count - a.statuses_count);
+  new Chart(document.getElementById('statusesChart'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(s => '@' + s.username),
+      datasets: [{
+        label: '累计发推',
+        data: sorted.map(s => s.statuses_count),
+        backgroundColor: sorted.map(s => s.username === DATA.self_account ? '#ff5a4e' : '#2ecc71'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8a93b0', maxRotation: 60, minRotation: 30 }, grid: { display: false } },
+        y: { ticks: { color: '#8a93b0', callback: v => fmtShort(v) }, grid: { color: 'rgba(255,255,255,0.05)' } }
+      }
+    }
+  });
+}
+
+function renderTable() {
+  const max = Math.max(...DATA.snapshots.map(s => s.followers));
+  const sorted = [...DATA.snapshots].sort((a,b) => b.followers - a.followers);
+  const tbody = document.getElementById('compareBody');
+  tbody.innerHTML = sorted.map(s => {
+    const e = (DATA.engagement || {})[s.username] || {};
+    const pct = max ? (s.followers / max * 100) : 0;
+    const isSelf = s.username === DATA.self_account;
+    return `
+      <tr class="${isSelf ? 'self-row' : ''}">
+        <td>@${s.username}</td>
+        <td class="num">${fmt(s.followers)}</td>
+        <td class="bar-cell"><div class="bar"><i style="width:${pct.toFixed(2)}%"></i></div></td>
+        <td class="num">${fmt(s.following)}</td>
+        <td class="num">${fmt(s.statuses_count)}</td>
+        <td class="num">${fmt(s.media_count)}</td>
+        <td class="num">${fmt(e.avg_like)}</td>
+        <td class="num">${fmt(e.avg_view)}</td>
+        <td>${s.is_blue_verified ? '✅' : '—'}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderUserSelector() {
+  const sel = document.getElementById('userSelector');
+  const all = DATA.snapshots.map(s => s.username);
+  // Move self first
+  all.sort((a,b) => (a === DATA.self_account ? -1 : b === DATA.self_account ? 1 : 0));
+  sel.innerHTML = all.map(u => {
+    const isSelf = u === DATA.self_account;
+    return `<div class="chip ${isSelf ? 'self' : ''}" data-user="${u}">@${u}</div>`;
+  }).join('');
+  sel.querySelectorAll('.chip').forEach(el => {
+    el.onclick = () => {
+      currentUser = el.dataset.user;
+      sel.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      renderTweets();
+    };
   });
   // Activate first
   const first = sel.querySelector('.chip');
